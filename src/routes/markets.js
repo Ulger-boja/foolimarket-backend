@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { PrismaClient } = require('@prisma/client');
 const { authenticate } = require('../middleware/auth');
+const { checkAndAwardBadges } = require('../utils/badges');
 const prisma = new PrismaClient();
 
 // GET /api/markets
@@ -93,6 +94,9 @@ router.post('/:id/bet', authenticate, async (req, res, next) => {
       }),
     ]);
 
+    // Check badges after bet placement (first_blood, degen, whale)
+    checkAndAwardBadges(req.user.id).catch(() => {});
+
     const { password, ...safeUser } = updatedUser;
     res.json({ success: true, data: { bet, user: safeUser } });
   } catch (e) { next(e); }
@@ -117,7 +121,10 @@ router.post('/:id/resolve', authenticate, async (req, res, next) => {
 
     // Pay out winners proportionally from total pool
     const updates = [];
+    const affectedUserIds = new Set();
+
     for (const bet of bets) {
+      affectedUserIds.add(bet.userId);
       if (bet.side === winningSide && winningPool > 0) {
         const payout = Math.round((bet.amount / winningPool) * totalPool);
         updates.push(
@@ -132,6 +139,24 @@ router.post('/:id/resolve', authenticate, async (req, res, next) => {
     );
 
     await prisma.$transaction(updates);
+
+    // Update streaks for each affected user
+    for (const userId of affectedUserIds) {
+      const userBets = bets.filter((b) => b.userId === userId);
+      const won = userBets.some((b) => b.side === winningSide && winningPool > 0);
+
+      const currentUser = await prisma.user.findUnique({ where: { id: userId } });
+      const newStreak = won ? currentUser.currentStreak + 1 : 0;
+      const newBest = Math.max(currentUser.bestStreak, newStreak);
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { currentStreak: newStreak, bestStreak: newBest },
+      });
+
+      // Check badges after resolution (prophet, village_idiot)
+      checkAndAwardBadges(userId).catch(() => {});
+    }
 
     const updated = await prisma.market.findUnique({ where: { id: market.id } });
     res.json({ success: true, data: { market: updated } });

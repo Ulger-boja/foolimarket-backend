@@ -9,7 +9,10 @@ app.use(express.json());
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/markets', require('./routes/markets'));
+app.use('/api/markets/:id/comments', require('./routes/comments'));
 app.use('/api/leaderboard', require('./routes/leaderboard'));
+app.use('/api/challenges', require('./routes/challenges'));
+app.use('/api/users', require('./routes/users'));
 
 app.get('/api/health', (req, res) => res.json({ success: true, message: 'FooliMarket API' }));
 

@@ -13,17 +13,31 @@ enum MarketStatus {
   RESOLVED
 }
 
+enum ChallengeStatus {
+  PENDING
+  ACCEPTED
+  RESOLVED
+  DECLINED
+}
+
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String
-  points    Int      @default(1000)
-  wins      Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  markets   Market[]
-  bets      Bet[]
+  id               String      @id @default(uuid())
+  email            String      @unique
+  password         String
+  name             String
+  points           Int         @default(1000)
+  wins             Int         @default(0)
+  currentStreak    Int         @default(0)
+  bestStreak       Int         @default(0)
+  lastLoginBonus   DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  markets          Market[]
+  bets             Bet[]
+  badges           Badge[]
+  comments         Comment[]
+  challengesCreated Challenge[] @relation("ChallengeCreator")
+  challengesTargeted Challenge[] @relation("ChallengeTarget")
 }
 
 model Market {
@@ -42,6 +56,7 @@ model Market {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   bets        Bet[]
+  comments    Comment[]
 
   @@index([status, createdAt])
   @@index([category, status])
@@ -60,4 +75,47 @@ model Bet {
 
   @@index([marketId])
   @@index([userId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  marketId  String
+  market    Market   @relation(fields: [marketId], references: [id])
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([marketId])
+}
+
+model Badge {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  name        String
+  icon        String
+  description String
+  earnedAt    DateTime @default(now())
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model Challenge {
+  id          String          @id @default(uuid())
+  creatorId   String
+  creator     User            @relation("ChallengeCreator", fields: [creatorId], references: [id])
+  targetId    String
+  target      User            @relation("ChallengeTarget", fields: [targetId], references: [id])
+  question    String
+  amount      Int
+  creatorSide String          // YES or NO
+  status      ChallengeStatus @default(PENDING)
+  outcome     String?         // YES or NO
+  createdAt   DateTime        @default(now())
+  resolvedAt  DateTime?
+
+  @@index([creatorId])
+  @@index([targetId])
 }

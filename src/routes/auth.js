@@ -34,4 +34,38 @@ router.get('/me', authenticate, async (req, res) => {
   res.json({ success: true, data: { user: safe(user) } });
 });
 
+// POST /api/auth/daily-bonus — claim 100 points if >24h since last claim
+router.post('/daily-bonus', authenticate, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const now = new Date();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+
+    if (user.lastLoginBonus && now - new Date(user.lastLoginBonus) < twentyFourHours) {
+      const nextBonus = new Date(new Date(user.lastLoginBonus).getTime() + twentyFourHours);
+      return res.status(400).json({
+        success: false,
+        message: 'Daily bonus already claimed',
+        data: { nextBonusAt: nextBonus },
+      });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { points: { increment: 100 }, lastLoginBonus: now },
+    });
+
+    const { password, ...safeUser } = updated;
+    res.json({
+      success: true,
+      data: {
+        user: safeUser,
+        points: updated.points,
+        streak: updated.currentStreak,
+        bonusAmount: 100,
+      },
+    });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;
